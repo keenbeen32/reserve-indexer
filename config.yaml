@@ -1,0 +1,250 @@
+# yaml-language-server: $schema=./node_modules/envio/evm.schema.json
+name: dtf-indexer-envio
+schema: schema.graphql
+
+# Global field selection — events need tx.hash for entity IDs and the
+# getTransactionReceipt Effect, and tx.from to capture deployer addresses
+# (subgraph reads event.transaction.from for FolioDeployed.deployer).
+field_selection:
+  transaction_fields:
+    - hash
+    - from
+
+contracts:
+  # ============================================================
+  # Static contracts (have addresses per chain)
+  # ============================================================
+
+  - name: RSR
+    abi_file_path: ./abis/erc20.json
+    events:
+      # Indexed Transfer; handler filters where to == 0x...dEaD (the burn sink).
+      - event: Transfer(address indexed from, address indexed to, uint256 value)
+
+  - name: FolioDeployer
+    abi_file_path: ./abis/folio-deployer.json
+    events:
+      - event: FolioDeployed(address indexed folioOwner, address indexed folio, address folioAdmin)
+      - event: GovernedFolioDeployed(address indexed stToken, address indexed folio, address ownerGovernor, address ownerTimelock, address tradingGovernor, address tradingTimelock)
+
+  - name: GovernanceDeployer
+    abi_file_path: ./abis/governance-deployer.json
+    events:
+      - event: DeployedGovernedStakingToken(address indexed underlying, address indexed stToken, address governor, address timelock)
+
+  - name: BridgedDTF
+    abi_file_path: ./abis/erc20.json
+    events:
+      - event: Transfer(address indexed from, address indexed to, uint256 value)
+
+  # ============================================================
+  # Dynamic contracts (registered at runtime via contractRegister;
+  # no address block in chains[*].contracts).
+  # Tuple components are anonymous — Envio's human-readable ABI parser
+  # does not accept named tuple components.
+  # ============================================================
+
+  - name: DTF
+    abi_file_path: ./abis/dtf.json
+    events:
+      # v4.0 RebalanceStarted: tokens[], weights[], prices[] separate arrays.
+      - event: RebalanceStarted(uint256 nonce, uint8 priceControl, address[] tokens, (uint256,uint256,uint256)[] weights, (uint256,uint256)[] prices, (uint256,uint256,uint256) limits, uint256 restrictedUntil, uint256 availableUntil)
+        name: RebalanceStartedV4
+
+      # v5.0 RebalanceStarted: tokens[] struct = (token, weight, price, maxAuctionSize, inRebalance)
+      - event: RebalanceStarted(uint256 indexed nonce, uint8 priceControl, (address,(uint256,uint256,uint256),(uint256,uint256),uint256,bool)[] tokens, (uint256,uint256,uint256) limits, uint256 startedAt, uint256 restrictedUntil, uint256 availableUntil, bool bidsEnabled)
+        name: RebalanceStartedV5
+
+      - event: RebalanceEnded(uint256 nonce)
+      - event: RebalanceControlSet((bool,uint8) newControl)
+
+      # v5.0 settings
+      - event: BidsEnabledSet(bool bidsEnabled)
+      - event: NameSet(string newName)
+      - event: TrustedFillerRegistrySet(address trustedFillerRegistry, bool isEnabled)
+
+      # v5.0 singleton auction
+      - event: AuctionOpened(uint256 indexed rebalanceNonce, uint256 indexed auctionId, address[] tokens, (uint256,uint256,uint256)[] weights, (uint256,uint256)[] prices, (uint256,uint256,uint256) limits, uint256 startTime, uint256 endTime)
+        name: AuctionOpenedV5
+      - event: AuctionBid(uint256 indexed auctionId, address indexed sellToken, address indexed buyToken, uint256 sellAmount, uint256 buyAmount)
+        name: AuctionBidV5
+      - event: AuctionTrustedFillCreated(uint256 indexed auctionId, address filler)
+
+      # Transfer (no receipt:true — mint/burn detection only needs from/to/value).
+      - event: Transfer(address indexed from, address indexed to, uint256 value)
+
+      # Fees
+      - event: FolioFeePaid(address indexed recipient, uint256 amount)
+      - event: ProtocolFeePaid(address indexed recipient, uint256 amount)
+
+      # Access control
+      - event: RoleGranted(bytes32 indexed role, address indexed account, address indexed sender)
+      - event: RoleRevoked(bytes32 indexed role, address indexed account, address indexed sender)
+
+      # Parameter setters
+      - event: MintFeeSet(uint256 newFee)
+      - event: TVLFeeSet(uint256 newFee, uint256 feeAnnually)
+      - event: AuctionDelaySet(uint256 newAuctionDelay)
+      - event: AuctionLengthSet(uint256 newAuctionLength)
+      - event: MandateSet(string newMandate)
+      - event: FeeRecipientsSet((address,uint96)[] recipients)
+
+      # Deprecated v1.0 / v2.0 auction events
+      - event: AuctionApproved(uint256 indexed auctionId, address indexed from, address indexed to, (uint256,address,address,(uint256,uint256,uint256),(uint256,uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256) auction)
+        name: AuctionApprovedV1
+      - event: AuctionApproved(uint256 indexed auctionId, address indexed from, address indexed to, (uint256,address,address,(uint256,uint256,uint256),(uint256,uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256) auction, ((uint256,uint256),uint256) details)
+        name: AuctionApprovedV2
+      - event: AuctionOpened(uint256 indexed auctionId, (uint256,address,address,(uint256,uint256,uint256),(uint256,uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256) auction)
+        name: AuctionOpenedV1
+      - event: AuctionOpened(uint256 indexed auctionId, (uint256,address,address,(uint256,uint256,uint256),(uint256,uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256) auction, uint256 runsRemaining)
+        name: AuctionOpenedV2
+      - event: AuctionClosed(uint256 indexed auctionId)
+      - event: AuctionBid(uint256 indexed auctionId, uint256 sellAmount, uint256 buyAmount)
+        name: AuctionBidV1
+
+  - name: StakingToken
+    abi_file_path: ./abis/staking-vault.json
+    events:
+      - event: RewardTokenAdded(address rewardToken)
+      - event: RewardTokenRemoved(address rewardToken)
+      - event: DelegateChanged(address indexed delegator, address indexed fromDelegate, address indexed toDelegate)
+      - event: DelegateVotesChanged(address indexed delegate, uint256 previousVotes, uint256 newVotes)
+      - event: OptimisticDelegateChanged(address indexed delegator, address indexed fromDelegate, address indexed toDelegate)
+      - event: OptimisticDelegateVotesChanged(address indexed delegate, uint256 previousVotes, uint256 newVotes)
+      - event: Transfer(address indexed from, address indexed to, uint256 value)
+      - event: OwnershipTransferred(address indexed previousOwner, address indexed newOwner)
+      - event: RewardsClaimed(address user, address rewardToken, uint256 amount)
+
+  - name: UnstakingManager
+    abi_file_path: ./abis/unstaking-manager.json
+    events:
+      - event: LockCreated(uint256 lockId, address user, uint256 amount, uint256 unlockTime)
+      - event: LockCancelled(uint256 lockId)
+      - event: LockClaimed(uint256 lockId)
+
+  - name: Governance
+    abi_file_path: ./abis/governor.json
+    events:
+      - event: ProposalCanceled(uint256 proposalId)
+      - event: ProposalCreated(uint256 proposalId, address proposer, address[] targets, uint256[] values, string[] signatures, bytes[] calldatas, uint256 voteStart, uint256 voteEnd, string description)
+      - event: ProposalExecuted(uint256 proposalId)
+      - event: ProposalQueued(uint256 proposalId, uint256 etaSeconds)
+      - event: ProposalThresholdSet(uint256 oldProposalThreshold, uint256 newProposalThreshold)
+      - event: QuorumNumeratorUpdated(uint256 oldQuorumNumerator, uint256 newQuorumNumerator)
+      - event: OptimisticParamsUpdated((uint48,uint32,uint256) optimisticParams)
+      - event: ProposalThrottleUpdated(uint256 throttleCapacity)
+      - event: VoteCast(address indexed voter, uint256 proposalId, uint8 support, uint256 weight, string reason)
+      - event: VotingDelaySet(uint256 oldVotingDelay, uint256 newVotingDelay)
+      - event: VotingPeriodSet(uint256 oldVotingPeriod, uint256 newVotingPeriod)
+
+  - name: Timelock
+    abi_file_path: ./abis/timelock.json
+    events:
+      - event: RoleGranted(bytes32 indexed role, address indexed account, address indexed sender)
+        name: TimelockRoleGranted
+      - event: RoleRevoked(bytes32 indexed role, address indexed account, address indexed sender)
+        name: TimelockRoleRevoked
+      - event: MinDelayChange(uint256 oldDuration, uint256 newDuration)
+      - event: CallScheduled(bytes32 indexed id, uint256 indexed index, address target, uint256 value, bytes data, bytes32 predecessor, uint256 delay)
+      - event: Cancelled(bytes32 indexed id)
+
+chains:
+  # =====================================================
+  # Ethereum mainnet (id 1)
+  # FolioDeployer versions: 1.0, 2.0, 4.0, 5.0
+  # GovernanceDeployer versions: 1.0, 2.0, 4.0, 5.0
+  # =====================================================
+  - id: 1
+    start_block: 21818973  # earliest FolioDeployer v1.0 deploy
+    contracts:
+      - name: RSR
+        address:
+          - "0x320623b8e4ff03373931769a31fc52a4e78b5d70"
+        start_block: 22380000
+      - name: FolioDeployer
+        address:
+          - "0xaafb13a3df7ce70c140e40c959d58fd5cc443cba"  # v1.0
+          - "0x4c64ef51cb057867e40114dcfa3702c2955d3644"  # v2.0
+          - "0xBE3B47587cEeff7D48008A0114f51cD571beC63A"  # v4.0
+          - "0x4D201a6e5BF975E2CEE9e5cbDfc803C0Ff122073"  # v5.0
+        start_block: 21818973
+      - name: GovernanceDeployer
+        address:
+          - "0xCB061c96Ff76E027ea99F73ddEe9108Dd6F0c212"  # v1.0
+          - "0xE926577a152fFD5f5036f88BF7E8E8D3652B558C"  # v2.0
+          - "0x5Bed18AcA50E6057E6658Fe8498004092EedCDcF"  # v4.0
+          - "0x72f87239981159ed23673012EE3806Ca6114AB2A"  # v5.0
+        start_block: 21818973
+      # Dynamic contracts (registered by FolioDeployed / GovernedFolioDeployed
+      # / DeployedGovernedStakingToken handlers). No address.
+      - name: DTF
+      - name: StakingToken
+      - name: UnstakingManager
+      - name: Governance
+      - name: Timelock
+
+  # =====================================================
+  # Base (id 8453)
+  # FolioDeployer versions: 1.0, 2.0, 4.0, 5.0
+  # Plus BridgedDTF (CMC20)
+  # =====================================================
+  - id: 8453
+    start_block: 25703976  # earliest GovernanceDeployer v1.0
+    contracts:
+      - name: RSR
+        address:
+          - "0xaB36452DbAC151bE02b16Ca17d8919826072f64a"
+        start_block: 29600000
+      - name: FolioDeployer
+        address:
+          - "0xe926577a152ffd5f5036f88bf7e8e8d3652b558c"  # v1.0
+          - "0xb8469986840bc9b7bb101c274950c02842755911"  # v2.0
+          - "0xA203AA351723cf943f91684e9F5eFcA7175Ae7EA"  # v4.0
+          - "0x3451fD177E9a8bB4Eb8271E627A804BD22A816F9"  # v5.0
+        start_block: 25958000
+      - name: GovernanceDeployer
+        address:
+          - "0xdBd9C5a83A3684E80D51fd1c00Af4A1fbfE03D14"  # v1.0
+          - "0x6a66E6E209C7120819cC033d9397E5022C22C872"  # v2.0
+          - "0x1A7D043c84fe781b6df046fEfCf673F71110208D"  # v4.0
+          - "0xECA52a5BDBAd98a5B4B6B944C4C9cc636D4D7461"  # v5.0
+        start_block: 25703976
+      - name: BridgedDTF
+        address:
+          - "0xa0A8481fc246Cd12f75227aBB96220fF5360fad3"  # CMC20
+        start_block: 38479225
+      - name: DTF
+      - name: StakingToken
+      - name: UnstakingManager
+      - name: Governance
+      - name: Timelock
+
+  # =====================================================
+  # BSC (id 56)
+  # FolioDeployer versions: 4.0, 4.0.1, 5.0
+  # GovernanceDeployer versions: 4.0, 4.0.1, 5.0
+  # =====================================================
+  - id: 56
+    start_block: 53679824
+    contracts:
+      - name: RSR
+        address:
+          - "0x23f72a3db61d6cb8abe5d9af1ac4b6c99327bfee"
+        start_block: 53679824
+      - name: FolioDeployer
+        address:
+          - "0x100E0eFDd7a4f67825E1BE5f0493F8D2AEAc00bb"  # v4.0
+          - "0x5Bed18AcA50E6057E6658Fe8498004092EedCDcF"  # v4.0.1
+          - "0x72f87239981159ed23673012EE3806Ca6114AB2A"  # v5.0
+        start_block: 53679824
+      - name: GovernanceDeployer
+        address:
+          - "0xBD49CeAC629d7131B8A975B582AcDAeB5C049bAD"  # v4.0
+          - "0x270d928b9Ee38BAD93601D197256390b3c3C13Ec"  # v4.0.1
+          - "0xA7BC1265C37A8D285cd2B10c842Efb8415A7bF9f"  # v5.0
+        start_block: 53679824
+      - name: DTF
+      - name: StakingToken
+      - name: UnstakingManager
+      - name: Governance
+      - name: Timelock

@@ -1,0 +1,644 @@
+# DTF Index schema — ported from dtf-index-subgraph/schema.graphql
+# Transforms applied uniformly:
+#   - @entity decorators removed (Envio HyperIndex has no @entity)
+#   - Bytes! -> String! (hex strings)
+#   - All entity arrays carry @derivedFrom (required by HyperIndex)
+#   - "interface Event" inlined onto TransferEvent (no GraphQL interfaces in HyperIndex)
+#   - All entity IDs are namespaced "${chainId}-${originalId}" by handlers
+
+###############################
+####### Version Registry ######
+###############################
+
+type Version {
+  id: ID!
+  hash: String!
+  address: String!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+}
+
+type RSRBurn {
+  id: ID!
+  amount: BigInt!
+  burner: String!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  transactionHash: String!
+}
+
+type RSRBurnGlobal {
+  id: ID!
+  totalBurned: BigInt!
+  totalBurnCount: BigInt!
+  lastUpdateBlock: BigInt!
+  lastUpdateTimestamp: BigInt!
+}
+
+type RSRBurnDailySnapshot {
+  id: ID!
+  dailyBurnAmount: BigInt!
+  dailyBurnCount: Int!
+  cumulativeBurned: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+}
+
+type RSRBurnMonthlySnapshot {
+  id: ID!
+  monthlyBurnAmount: BigInt!
+  monthlyBurnCount: Int!
+  cumulativeBurned: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+}
+
+#############################
+####### DTF FOLIO      ######
+#############################
+
+type DTF {
+  id: ID!
+  token: Token!
+  totalRevenue: BigInt!
+  protocolRevenue: BigInt!
+  governanceRevenue: BigInt!
+  externalRevenue: BigInt!
+  deployer: String!
+  proxyAdmin: String!
+  mintingFee: BigInt!
+  tvlFee: BigInt!
+  auctionDelay: BigInt!
+  auctionLength: BigInt!
+  bidsEnabled: Boolean
+  trustedFillerRegistry: String
+  trustedFillerEnabled: Boolean
+  mandate: String!
+  weightControl: Boolean!
+  priceControl: Int!
+  annualizedTvlFee: BigInt!
+  auctionApprovers: [String!]!
+  legacyAuctionApprovers: [String!]!
+  auctionLaunchers: [String!]!
+  brandManagers: [String!]!
+  admins: [String!]!
+  legacyAdmins: [String!]!
+  stToken: StakingToken
+  stTokenAddress: String
+  ownerAddress: String!
+  ownerGovernance: Governance
+  tradingGovernance: Governance
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  feeRecipients: String!
+  rebalances: [Rebalance!]! @derivedFrom(field: "dtf")
+}
+
+type Rebalance {
+  id: ID!
+  nonce: BigInt!
+  dtf: DTF!
+  # NOTE: Token IDs (chainId-tokenAddress). HyperIndex disallows entity arrays
+  # without @derivedFrom; a denormalized many-to-many on Rebalance/Auction is
+  # represented as ID strings, matching how the subgraph stored Token refs.
+  tokens: [String!]!
+  priceControl: String!
+  weightLowLimit: [BigInt!]!
+  weightSpotLimit: [BigInt!]!
+  weightHighLimit: [BigInt!]!
+  rebalanceLowLimit: BigInt!
+  rebalanceSpotLimit: BigInt!
+  rebalanceHighLimit: BigInt!
+  priceLowLimit: [BigInt!]!
+  priceHighLimit: [BigInt!]!
+  restrictedUntil: BigInt!
+  availableUntil: BigInt!
+  startedAt: BigInt
+  bidsEnabled: Boolean
+  maxAuctionSize: [BigInt!]
+  # In-rebalance flag per token (v5.0+). HyperIndex disallows [Boolean!]; stored
+  # as "true"/"false" strings — handlers convert with .map(String).
+  inRebalance: [String!]
+  transactionHash: String!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  auctions: [Auction!]! @derivedFrom(field: "rebalance")
+}
+
+type Auction {
+  id: ID!
+  dtf: DTF!
+  rebalance: Rebalance!
+  # NOTE: see Rebalance.tokens comment — stored as ID strings, not entity refs.
+  tokens: [String!]!
+  weightLowLimit: [BigInt!]!
+  weightSpotLimit: [BigInt!]!
+  weightHighLimit: [BigInt!]!
+  rebalanceLowLimit: BigInt!
+  rebalanceSpotLimit: BigInt!
+  rebalanceHighLimit: BigInt!
+  priceLowLimit: [BigInt!]!
+  priceHighLimit: [BigInt!]!
+  startTime: BigInt!
+  endTime: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  transactionHash: String!
+  bids: [RebalanceAuctionBid!]! @derivedFrom(field: "auction")
+}
+
+type RebalanceAuctionBid {
+  id: ID!
+  dtf: DTF!
+  auction: Auction!
+  bidder: String!
+  filler: String
+  sellToken: Token!
+  buyToken: Token!
+  sellAmount: BigInt!
+  buyAmount: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  transactionHash: String!
+}
+
+enum TradeState {
+  APPROVED
+  LAUNCHED
+  CLOSED
+}
+
+# @deprecated - v1.0 / v2.0 auctions
+type Trade {
+  id: ID!
+  dtf: DTF!
+  sell: Token!
+  buy: Token!
+  soldAmount: BigInt!
+  boughtAmount: BigInt!
+  startPrice: BigInt!
+  endPrice: BigInt!
+  sellLimitSpot: BigInt!
+  sellLimitHigh: BigInt!
+  sellLimitLow: BigInt!
+  buyLimitSpot: BigInt!
+  buyLimitHigh: BigInt!
+  buyLimitLow: BigInt!
+  approvedSellLimitSpot: BigInt!
+  approvedBuyLimitSpot: BigInt!
+  approvedStartPrice: BigInt!
+  approvedEndPrice: BigInt!
+  availableAt: BigInt!
+  launchTimeout: BigInt!
+  start: BigInt!
+  end: BigInt!
+  approvedTimestamp: BigInt!
+  approvedBlockNumber: BigInt!
+  approvedTransactionHash: String!
+  launchedTimestamp: BigInt!
+  launchedBlockNumber: BigInt!
+  launchedTransactionHash: String!
+  closedTimestamp: BigInt!
+  closedBlockNumber: BigInt!
+  closedTransactionHash: String!
+  isKilled: Boolean!
+  availableRuns: BigInt!
+  state: TradeState!
+  bids: [AuctionBid!]! @derivedFrom(field: "auction")
+}
+
+# @deprecated - v1.0 / v2.0 auctions
+type AuctionBid {
+  id: ID!
+  dtf: DTF!
+  auction: Trade!
+  bidder: String!
+  sellAmount: BigInt!
+  buyAmount: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  transactionHash: String!
+}
+
+#############################
+####### Token Metadata ######
+#############################
+
+enum TokenType {
+  DTF
+  VOTE
+  ASSET
+  BRIDGED_DTF
+}
+
+type Token {
+  id: ID!
+  address: String!
+  name: String!
+  symbol: String!
+  decimals: Int!
+  currentHolderCount: BigInt!
+  cumulativeHolderCount: BigInt!
+  transferCount: BigInt!
+  mintCount: BigInt!
+  burnCount: BigInt!
+  totalSupply: BigInt!
+  totalBurned: BigInt!
+  totalMinted: BigInt!
+  type: TokenType!
+  transfers: [TransferEvent!]! @derivedFrom(field: "token")
+  holdersBalance: [AccountBalance!]! @derivedFrom(field: "token")
+  dailyTokenSnapshot: [TokenDailySnapshot!]! @derivedFrom(field: "token")
+}
+
+###############################
+####### Token Timeseries ######
+###############################
+
+type TokenDailySnapshot {
+  id: ID!
+  token: Token!
+  dailyRevenue: BigInt!
+  dailyProtocolRevenue: BigInt!
+  dailyGovernanceRevenue: BigInt!
+  dailyExternalRevenue: BigInt!
+  dailyTotalSupply: BigInt!
+  currentHolderCount: BigInt!
+  cumulativeHolderCount: BigInt!
+  dailyEventCount: Int!
+  dailyTransferCount: Int!
+  dailyTransferAmount: BigInt!
+  dailyMintCount: Int!
+  dailyMintAmount: BigInt!
+  dailyBurnCount: Int!
+  dailyBurnAmount: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+}
+
+type TokenHourlySnapshot {
+  id: ID!
+  token: Token!
+  hourlyRevenue: BigInt!
+  hourlyProtocolRevenue: BigInt!
+  hourlyGovernanceRevenue: BigInt!
+  hourlyExternalRevenue: BigInt!
+  hourlyTotalSupply: BigInt!
+  currentHolderCount: BigInt!
+  cumulativeHolderCount: BigInt!
+  hourlyEventCount: Int!
+  hourlyTransferCount: Int!
+  hourlyTransferAmount: BigInt!
+  hourlyMintCount: Int!
+  hourlyMintAmount: BigInt!
+  hourlyBurnCount: Int!
+  hourlyBurnAmount: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+}
+
+type TokenMonthlySnapshot {
+  id: ID!
+  token: Token!
+  monthlyTotalSupply: BigInt!
+  monthlyMintAmount: BigInt!
+  monthlyMintCount: Int!
+  monthlyBurnAmount: BigInt!
+  monthlyBurnCount: Int!
+  monthlyTransferCount: Int!
+  monthlyTransferAmount: BigInt!
+  monthlyEventCount: Int!
+  currentHolderCount: BigInt!
+  cumulativeHolderCount: BigInt!
+  monthlyRevenue: BigInt!
+  monthlyProtocolRevenue: BigInt!
+  monthlyGovernanceRevenue: BigInt!
+  monthlyExternalRevenue: BigInt!
+  cumulativeRevenue: BigInt!
+  cumulativeProtocolRevenue: BigInt!
+  cumulativeGovernanceRevenue: BigInt!
+  cumulativeExternalRevenue: BigInt!
+  cumulativeMintAmount: BigInt!
+  cumulativeBurnAmount: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+}
+
+##################################
+##### Event-Level Data #####
+##################################
+
+# Note: subgraph defined an abstract "interface Event" implemented by TransferEvent.
+# HyperIndex doesn't support GraphQL interfaces, so we inline the interface fields
+# directly onto TransferEvent. No data loss; only the abstract type goes away.
+
+type TransferEvent {
+  id: ID!
+  hash: String!
+  logIndex: Int!
+  token: Token!
+  nonce: Int!
+  amount: BigInt!
+  to: Account
+  from: Account
+  blockNumber: BigInt!
+  type: String!
+  timestamp: BigInt!
+}
+
+##################################
+######## Account MetaData ########
+##################################
+
+type Account {
+  id: ID!
+  transferTo: [TransferEvent!]! @derivedFrom(field: "to")
+  transferFrom: [TransferEvent!]! @derivedFrom(field: "from")
+  balances: [AccountBalance!]! @derivedFrom(field: "account")
+  mintings: [Minting!]! @derivedFrom(field: "account")
+  locks: [Lock!]! @derivedFrom(field: "account")
+  rewardClaims: [RewardClaim!]! @derivedFrom(field: "account")
+  balancesSnapshot: [AccountBalanceDailySnapshot!]! @derivedFrom(field: "account")
+}
+
+type AccountBalance {
+  id: ID!
+  account: Account!
+  token: Token!
+  amount: BigInt!
+  delegate: Delegate
+  optimisticDelegate: Delegate
+  blockNumber: BigInt
+  timestamp: BigInt
+  firstHoldTimestamp: BigInt
+  currentHoldStartTimestamp: BigInt
+}
+
+type Minting {
+  id: ID!
+  account: Account!
+  token: Token!
+  amount: BigInt!
+  firstMintTimestamp: BigInt!
+}
+
+###############################
+###### Account Timeseries #####
+###############################
+
+type AccountBalanceDailySnapshot {
+  id: ID!
+  account: Account!
+  token: Token!
+  amount: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+}
+
+###############################
+###### Governance         #####
+###############################
+
+enum ProposalState {
+  PENDING
+  ACTIVE
+  CANCELED
+  DEFEATED
+  SUCCEEDED
+  QUEUED
+  EXPIRED
+  EXECUTED
+  VETOED
+}
+
+enum VoteChoice {
+  FOR
+  AGAINST
+  ABSTAIN
+}
+
+type Governance {
+  id: ID!
+  name: String!
+  version: String!
+  timelock: GovernanceTimelock!
+  token: StakingToken!
+  votingDelay: BigInt!
+  votingPeriod: BigInt!
+  proposalThreshold: BigInt!
+  quorumVotes: BigInt
+  quorumNumerator: BigInt
+  quorumDenominator: BigInt
+  isOptimistic: Boolean
+  optimisticVetoDelay: BigInt
+  optimisticVetoPeriod: BigInt
+  optimisticVetoThreshold: BigInt
+  optimisticProposalThrottleCapacity: BigInt
+  optimisticSelectorRegistry: String
+  optimisticProposers: [String!]
+  proposalCount: BigInt!
+  proposalsQueued: BigInt!
+  proposalsExecuted: BigInt!
+  proposalsCanceled: BigInt!
+  proposals: [Proposal!]! @derivedFrom(field: "governance")
+}
+
+type GovernanceTimelock {
+  id: ID!
+  governance: Governance
+  executionDelay: BigInt!
+  guardians: [String!]!
+  optimisticProposers: [String!]
+  entity: String!
+  type: String!
+}
+
+type TimelockOperation {
+  id: ID!
+  transactionHash: String!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  proposal: Proposal
+}
+
+type TimelockOperationByTx {
+  id: ID!
+  timelockId: String!
+}
+
+type Proposal {
+  id: ID!
+  txnHash: String!
+  description: String!
+  governance: Governance!
+  proposer: Delegate!
+  state: ProposalState!
+  isOptimistic: Boolean
+  vetoThreshold: BigInt
+  quorumVotes: BigInt!
+  tokenHoldersAtStart: BigInt!
+  delegatesAtStart: BigInt!
+  againstDelegateVotes: BigInt!
+  forDelegateVotes: BigInt!
+  abstainDelegateVotes: BigInt!
+  totalDelegateVotes: BigInt!
+  againstWeightedVotes: BigInt!
+  forWeightedVotes: BigInt!
+  abstainWeightedVotes: BigInt!
+  totalWeightedVotes: BigInt!
+  votes: [Vote!]! @derivedFrom(field: "proposal")
+  creationBlock: BigInt!
+  creationTime: BigInt!
+  voteStart: BigInt!
+  voteEnd: BigInt!
+  queueTxnHash: String
+  queueAccount: Account
+  queueBlock: BigInt
+  queueTime: BigInt
+  executionETA: BigInt
+  executionTxnHash: String
+  executionAccount: Account
+  executionBlock: BigInt
+  executionTime: BigInt
+  cancellationTxnHash: String
+  cancellationAccount: Account
+  cancellationBlock: BigInt
+  cancellationTime: BigInt
+  timelockId: String
+  targets: [String!]
+  values: [BigInt!]
+  signatures: [String!]
+  calldatas: [String!]
+}
+
+type Vote {
+  id: ID!
+  choice: VoteChoice!
+  weight: BigInt!
+  reason: String
+  voter: Delegate!
+  proposal: Proposal!
+  block: BigInt!
+  blockTime: BigInt!
+  txnHash: String!
+  logIndex: BigInt!
+  blockTimeId: String!
+}
+
+type VoteDailySnapshot {
+  id: ID!
+  proposal: Proposal!
+  forWeightedVotes: BigInt!
+  againstWeightedVotes: BigInt!
+  abstainWeightedVotes: BigInt!
+  totalWeightedVotes: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+}
+
+type StakingToken {
+  id: ID!
+  underlying: Token
+  token: Token!
+  governance: Governance
+  legacyGovernance: [String!]!
+  currentDelegates: BigInt!
+  totalDelegates: BigInt!
+  delegatedVotesRaw: BigInt!
+  delegatedVotes: BigDecimal!
+  currentOptimisticDelegates: BigInt!
+  totalOptimisticDelegates: BigInt!
+  optimisticDelegatedVotesRaw: BigInt!
+  optimisticDelegatedVotes: BigDecimal!
+  delegates: [Delegate!]! @derivedFrom(field: "token")
+  dtfs: [DTF!]! @derivedFrom(field: "stToken")
+  daos: [Governance!]! @derivedFrom(field: "token")
+  rewards: [StakingTokenRewards!]! @derivedFrom(field: "stToken")
+}
+
+type StakingTokenRewards {
+  id: ID!
+  stToken: StakingToken!
+  rewardToken: Token!
+  active: Boolean!
+}
+
+type UnstakingManager {
+  id: ID!
+  token: StakingToken!
+}
+
+type Lock {
+  id: ID!
+  lockId: BigInt!
+  token: StakingToken!
+  amount: BigInt!
+  account: Account!
+  unlockTime: BigInt!
+  createdBlock: BigInt!
+  createdTimestamp: BigInt!
+  createdTxnHash: String!
+  cancelledBlock: BigInt
+  cancelledTimestamp: BigInt
+  cancelledTxnHash: String
+  claimedBlock: BigInt
+  claimedTimestamp: BigInt
+  claimedTxnHash: String
+}
+
+type RewardClaim {
+  id: ID!
+  token: StakingToken!
+  account: Account!
+  rewardToken: Token!
+  amount: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  txnHash: String!
+}
+
+type Delegate {
+  id: ID!
+  address: String!
+  token: StakingToken!
+  delegatedVotesRaw: BigInt!
+  delegatedVotes: BigDecimal!
+  optimisticDelegatedVotesRaw: BigInt!
+  optimisticDelegatedVotes: BigDecimal!
+  hasBeenStandardDelegate: Boolean!
+  hasBeenOptimisticDelegate: Boolean!
+  tokenHoldersRepresentedAmount: Int!
+  optimisticTokenHoldersRepresentedAmount: Int!
+  tokenHoldersRepresented: [AccountBalance!]! @derivedFrom(field: "delegate")
+  optimisticTokenHoldersRepresented: [AccountBalance!]! @derivedFrom(field: "optimisticDelegate")
+  votes: [Vote!]! @derivedFrom(field: "voter")
+  numberVotes: Int!
+  numberOptimisticVotes: Int!
+  proposals: [Proposal!]! @derivedFrom(field: "proposer")
+}
+
+type DelegateChange {
+  id: ID!
+  tokenAddress: String!
+  delegator: String!
+  delegate: String!
+  previousDelegate: String!
+  isOptimistic: Boolean
+  blockTimestamp: BigInt!
+  txnHash: String!
+  logIndex: BigInt!
+  blockNumber: BigInt!
+}
+
+type DelegateVotingPowerChange {
+  id: ID!
+  tokenAddress: String!
+  delegate: String!
+  previousBalance: BigInt!
+  newBalance: BigInt!
+  isOptimistic: Boolean
+  blockTimestamp: BigInt!
+  txnHash: String!
+  logIndex: BigInt!
+  blockNumber: BigInt!
+}

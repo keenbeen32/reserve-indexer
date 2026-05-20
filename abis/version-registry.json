@@ -1,0 +1,140 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "contract IRoleRegistry",
+        "name": "_roleRegistry",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [],
+    "name": "VersionRegistry__AlreadyDeprecated",
+    "type": "error"
+  },
+  { "inputs": [], "name": "VersionRegistry__InvalidCaller", "type": "error" },
+  {
+    "inputs": [],
+    "name": "VersionRegistry__InvalidRegistration",
+    "type": "error"
+  },
+  { "inputs": [], "name": "VersionRegistry__Unconfigured", "type": "error" },
+  { "inputs": [], "name": "VersionRegistry__ZeroAddress", "type": "error" },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "versionHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "VersionDeprecated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "versionHash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "contract IFolioDeployer",
+        "name": "folioDeployer",
+        "type": "address"
+      }
+    ],
+    "name": "VersionRegistered",
+    "type": "event"
+  },
+  {
+    "inputs": [{ "internalType": "bytes32", "name": "", "type": "bytes32" }],
+    "name": "deployments",
+    "outputs": [
+      {
+        "internalType": "contract IFolioDeployer",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "versionHash", "type": "bytes32" }
+    ],
+    "name": "deprecateVersion",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "versionHash", "type": "bytes32" }
+    ],
+    "name": "getImplementationForVersion",
+    "outputs": [
+      { "internalType": "address", "name": "folio", "type": "address" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getLatestVersion",
+    "outputs": [
+      { "internalType": "bytes32", "name": "versionHash", "type": "bytes32" },
+      { "internalType": "string", "name": "version", "type": "string" },
+      {
+        "internalType": "contract IFolioDeployer",
+        "name": "folioDeployer",
+        "type": "address"
+      },
+      { "internalType": "bool", "name": "deprecated", "type": "bool" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "bytes32", "name": "", "type": "bytes32" }],
+    "name": "isDeprecated",
+    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract IFolioDeployer",
+        "name": "folioDeployer",
+        "type": "address"
+      }
+    ],
+    "name": "registerVersion",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "roleRegistry",
+    "outputs": [
+      {
+        "internalType": "contract IRoleRegistry",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]
