@@ -1,5 +1,5 @@
 {
-  "name": "reverse-indexer",
+  "name": "reverse-indexer", 
   "version": "0.1.0",
   "type": "module",
   "scripts": {
