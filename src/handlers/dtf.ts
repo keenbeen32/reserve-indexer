@@ -34,6 +34,10 @@ const ROLE_AUCTION_LAUNCHER = normalizeRole(Role.AUCTION_LAUNCHER);
 const ROLE_BRAND_MANAGER = normalizeRole(Role.BRAND_MANAGER);
 const ROLE_DEFAULT_ADMIN = normalizeRole(Role.DEFAULT_ADMIN);
 
+// TEMP DEBUG — verifies the deploy-tx event-ordering hypothesis for the OPEN
+// folio. Remove once confirmed. Logs prefixed with [ORDER-DEBUG].
+const DEBUG_DTF = "0x323c03c48660fe31186fa82c289b0766d331ce21";
+
 function dtfId(chainId: number, addr: string): string {
   return makeId(chainId, addr);
 }
@@ -676,6 +680,11 @@ indexer.onEvent(
     const dtfAddr = event.srcAddress.toLowerCase();
     const id = dtfId(chainId, dtfAddr);
     const dtf = await context.DTF.get(id);
+    if (dtfAddr === DEBUG_DTF) {
+      context.log.info(
+        `[ORDER-DEBUG] RoleGranted block=${event.block.number} logIndex=${event.logIndex} dtfExists=${dtf !== undefined} role=${event.params.role}`,
+      );
+    }
     if (!dtf) return;
     const role = normalizeRole(event.params.role);
     const account = event.params.account.toLowerCase();
@@ -771,6 +780,11 @@ indexer.onEvent(
   async ({ event, context }) => {
     const id = dtfId(event.chainId, event.srcAddress.toLowerCase());
     const dtf = await context.DTF.get(id);
+    if (event.srcAddress.toLowerCase() === DEBUG_DTF) {
+      context.log.info(
+        `[ORDER-DEBUG] MintFeeSet block=${event.block.number} logIndex=${event.logIndex} dtfExists=${dtf !== undefined}`,
+      );
+    }
     if (!dtf) return;
     context.DTF.set({ ...dtf, mintingFee: event.params.newFee });
   },
@@ -784,6 +798,11 @@ indexer.onEvent(
   async ({ event, context }) => {
     const id = dtfId(event.chainId, event.srcAddress.toLowerCase());
     const dtf = await context.DTF.get(id);
+    if (event.srcAddress.toLowerCase() === DEBUG_DTF) {
+      context.log.info(
+        `[ORDER-DEBUG] TVLFeeSet block=${event.block.number} logIndex=${event.logIndex} dtfExists=${dtf !== undefined}`,
+      );
+    }
     if (!dtf) return;
     context.DTF.set({
       ...dtf,

@@ -42,6 +42,12 @@ indexer.onEvent(
   async ({ event, context }) => {
     const chainId = event.chainId;
     const dtfAddress = event.params.folio.toLowerCase();
+    // TEMP DEBUG — see [ORDER-DEBUG] logs in dtf.ts. Remove once confirmed.
+    if (dtfAddress === "0x323c03c48660fe31186fa82c289b0766d331ce21") {
+      context.log.info(
+        `[ORDER-DEBUG] FolioDeployed block=${event.block.number} logIndex=${event.logIndex} CREATING DTF`,
+      );
+    }
     const proxyAdmin = event.params.folioAdmin.toLowerCase();
     const deployer = event.transaction.from
       ? (event.transaction.from as string).toLowerCase()
