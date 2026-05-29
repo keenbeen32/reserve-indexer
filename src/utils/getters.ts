@@ -74,6 +74,63 @@ export async function getOrCreateToken(
   return token;
 }
 
+// Single DTF-construction point. The Folio emits its init events (MintFeeSet,
+// TVLFeeSet, RoleGranted, ...) at a lower logIndex than FolioDeployed, so a
+// config handler can be the first to touch the DTF — it must create the entity
+// rather than bail. deployer/proxyAdmin/ownerAddress are placeholders here;
+// the FolioDeployed handler fills them and merges (never re-defaults config).
+export async function getOrCreateDTF(
+  context: Ctx,
+  chainId: number,
+  dtfAddress: string,
+  blockNumber: bigint,
+  timestamp: bigint,
+): Promise<Entity<"DTF">> {
+  const id = makeId(chainId, dtfAddress);
+  const existing = await context.DTF.get(id);
+  if (existing) return existing;
+
+  const token = await getOrCreateToken(context, chainId, dtfAddress, TokenType.DTF);
+  const dtf: Entity<"DTF"> = {
+    id,
+    token_id: token.id,
+    totalRevenue: BIGINT_ZERO,
+    protocolRevenue: BIGINT_ZERO,
+    governanceRevenue: BIGINT_ZERO,
+    externalRevenue: BIGINT_ZERO,
+    deployer: "",
+    proxyAdmin: "",
+    mintingFee: BIGINT_ZERO,
+    tvlFee: BIGINT_ZERO,
+    auctionDelay: BIGINT_ZERO,
+    auctionLength: BIGINT_ZERO,
+    bidsEnabled: undefined,
+    trustedFillerRegistry: undefined,
+    trustedFillerEnabled: undefined,
+    mandate: "",
+    // Default to NATIVE DTF with PARTIAL price control; RebalanceControlSet overrides.
+    weightControl: true,
+    priceControl: 1,
+    annualizedTvlFee: BIGINT_ZERO,
+    auctionApprovers: [],
+    legacyAuctionApprovers: [],
+    auctionLaunchers: [],
+    brandManagers: [],
+    admins: [],
+    legacyAdmins: [],
+    stToken_id: undefined,
+    stTokenAddress: undefined,
+    ownerAddress: "",
+    ownerGovernance_id: undefined,
+    tradingGovernance_id: undefined,
+    blockNumber,
+    timestamp,
+    feeRecipients: "",
+  };
+  context.DTF.set(dtf);
+  return dtf;
+}
+
 // Canonical "first time we see this stToken" hook. Seeds totalSupply from chain
 // so pre-discovery Transfers aren't lost. Template subscription happens at the
 // indexer.contractRegister hook for the spawning event, not here.

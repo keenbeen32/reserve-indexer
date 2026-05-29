@@ -21,6 +21,7 @@ import {
 } from "../utils/constants";
 import {
   createGovernanceTimelock,
+  getOrCreateDTF,
   getOrCreateRSRBurnGlobal,
   getOrCreateToken,
 } from "../utils/getters";
@@ -33,10 +34,6 @@ const ROLE_AUCTION_APPROVER = normalizeRole(Role.AUCTION_APPROVER);
 const ROLE_AUCTION_LAUNCHER = normalizeRole(Role.AUCTION_LAUNCHER);
 const ROLE_BRAND_MANAGER = normalizeRole(Role.BRAND_MANAGER);
 const ROLE_DEFAULT_ADMIN = normalizeRole(Role.DEFAULT_ADMIN);
-
-// TEMP DEBUG — verifies the deploy-tx event-ordering hypothesis for the OPEN
-// folio. Remove once confirmed. Logs prefixed with [ORDER-DEBUG].
-const DEBUG_DTF = "0x323c03c48660fe31186fa82c289b0766d331ce21";
 
 function dtfId(chainId: number, addr: string): string {
   return makeId(chainId, addr);
@@ -216,8 +213,13 @@ indexer.onEvent(
   { contract: "DTF", event: "RebalanceControlSet" },
   async ({ event, context }) => {
     const id = dtfId(event.chainId, event.srcAddress.toLowerCase());
-    const dtf = await context.DTF.get(id);
-    if (!dtf) return;
+    const dtf = await getOrCreateDTF(
+      context,
+      event.chainId,
+      event.srcAddress.toLowerCase(),
+      BigInt(event.block.number),
+      BigInt(event.block.timestamp),
+    );
     context.DTF.set({
       ...dtf,
       weightControl: event.params.newControl[0],
@@ -233,8 +235,13 @@ indexer.onEvent(
   { contract: "DTF", event: "BidsEnabledSet" },
   async ({ event, context }) => {
     const id = dtfId(event.chainId, event.srcAddress.toLowerCase());
-    const dtf = await context.DTF.get(id);
-    if (!dtf) return;
+    const dtf = await getOrCreateDTF(
+      context,
+      event.chainId,
+      event.srcAddress.toLowerCase(),
+      BigInt(event.block.number),
+      BigInt(event.block.timestamp),
+    );
     context.DTF.set({ ...dtf, bidsEnabled: event.params.bidsEnabled });
   },
 );
@@ -262,8 +269,13 @@ indexer.onEvent(
   { contract: "DTF", event: "TrustedFillerRegistrySet" },
   async ({ event, context }) => {
     const id = dtfId(event.chainId, event.srcAddress.toLowerCase());
-    const dtf = await context.DTF.get(id);
-    if (!dtf) return;
+    const dtf = await getOrCreateDTF(
+      context,
+      event.chainId,
+      event.srcAddress.toLowerCase(),
+      BigInt(event.block.number),
+      BigInt(event.block.timestamp),
+    );
     context.DTF.set({
       ...dtf,
       trustedFillerRegistry: event.params.trustedFillerRegistry.toLowerCase(),
@@ -462,8 +474,13 @@ indexer.onEvent(
     const chainId = event.chainId;
     const dtfAddr = event.srcAddress.toLowerCase();
     const id = dtfId(chainId, dtfAddr);
-    const dtf = await context.DTF.get(id);
-    if (!dtf) return;
+    const dtf = await getOrCreateDTF(
+      context,
+      event.chainId,
+      event.srcAddress.toLowerCase(),
+      BigInt(event.block.number),
+      BigInt(event.block.timestamp),
+    );
     const amount = event.params.amount;
     const recipient = event.params.recipient.toLowerCase();
 
@@ -511,8 +528,13 @@ indexer.onEvent(
     const chainId = event.chainId;
     const dtfAddr = event.srcAddress.toLowerCase();
     const id = dtfId(chainId, dtfAddr);
-    const dtf = await context.DTF.get(id);
-    if (!dtf) return;
+    const dtf = await getOrCreateDTF(
+      context,
+      event.chainId,
+      event.srcAddress.toLowerCase(),
+      BigInt(event.block.number),
+      BigInt(event.block.timestamp),
+    );
     const amount = event.params.amount;
     const newDtf: Entity<"DTF"> = {
       ...dtf,
@@ -679,13 +701,13 @@ indexer.onEvent(
     const chainId = event.chainId;
     const dtfAddr = event.srcAddress.toLowerCase();
     const id = dtfId(chainId, dtfAddr);
-    const dtf = await context.DTF.get(id);
-    if (dtfAddr === DEBUG_DTF) {
-      context.log.info(
-        `[ORDER-DEBUG] RoleGranted block=${event.block.number} logIndex=${event.logIndex} dtfExists=${dtf !== undefined} role=${event.params.role}`,
-      );
-    }
-    if (!dtf) return;
+    const dtf = await getOrCreateDTF(
+      context,
+      chainId,
+      dtfAddr,
+      BigInt(event.block.number),
+      BigInt(event.block.timestamp),
+    );
     const role = normalizeRole(event.params.role);
     const account = event.params.account.toLowerCase();
 
@@ -729,8 +751,13 @@ indexer.onEvent(
     const chainId = event.chainId;
     const dtfAddr = event.srcAddress.toLowerCase();
     const id = dtfId(chainId, dtfAddr);
-    const dtf = await context.DTF.get(id);
-    if (!dtf) return;
+    const dtf = await getOrCreateDTF(
+      context,
+      event.chainId,
+      event.srcAddress.toLowerCase(),
+      BigInt(event.block.number),
+      BigInt(event.block.timestamp),
+    );
     const role = normalizeRole(event.params.role);
     const account = event.params.account.toLowerCase();
     let next: Entity<"DTF"> = { ...dtf };
@@ -778,14 +805,13 @@ indexer.onEvent(
 indexer.onEvent(
   { contract: "DTF", event: "MintFeeSet" },
   async ({ event, context }) => {
-    const id = dtfId(event.chainId, event.srcAddress.toLowerCase());
-    const dtf = await context.DTF.get(id);
-    if (event.srcAddress.toLowerCase() === DEBUG_DTF) {
-      context.log.info(
-        `[ORDER-DEBUG] MintFeeSet block=${event.block.number} logIndex=${event.logIndex} dtfExists=${dtf !== undefined}`,
-      );
-    }
-    if (!dtf) return;
+    const dtf = await getOrCreateDTF(
+      context,
+      event.chainId,
+      event.srcAddress.toLowerCase(),
+      BigInt(event.block.number),
+      BigInt(event.block.timestamp),
+    );
     context.DTF.set({ ...dtf, mintingFee: event.params.newFee });
   },
 );
@@ -796,14 +822,13 @@ indexer.onEvent(
 indexer.onEvent(
   { contract: "DTF", event: "TVLFeeSet" },
   async ({ event, context }) => {
-    const id = dtfId(event.chainId, event.srcAddress.toLowerCase());
-    const dtf = await context.DTF.get(id);
-    if (event.srcAddress.toLowerCase() === DEBUG_DTF) {
-      context.log.info(
-        `[ORDER-DEBUG] TVLFeeSet block=${event.block.number} logIndex=${event.logIndex} dtfExists=${dtf !== undefined}`,
-      );
-    }
-    if (!dtf) return;
+    const dtf = await getOrCreateDTF(
+      context,
+      event.chainId,
+      event.srcAddress.toLowerCase(),
+      BigInt(event.block.number),
+      BigInt(event.block.timestamp),
+    );
     context.DTF.set({
       ...dtf,
       tvlFee: event.params.newFee,
@@ -816,8 +841,13 @@ indexer.onEvent(
   { contract: "DTF", event: "AuctionDelaySet" },
   async ({ event, context }) => {
     const id = dtfId(event.chainId, event.srcAddress.toLowerCase());
-    const dtf = await context.DTF.get(id);
-    if (!dtf) return;
+    const dtf = await getOrCreateDTF(
+      context,
+      event.chainId,
+      event.srcAddress.toLowerCase(),
+      BigInt(event.block.number),
+      BigInt(event.block.timestamp),
+    );
     context.DTF.set({ ...dtf, auctionDelay: event.params.newAuctionDelay });
   },
 );
@@ -826,8 +856,13 @@ indexer.onEvent(
   { contract: "DTF", event: "AuctionLengthSet" },
   async ({ event, context }) => {
     const id = dtfId(event.chainId, event.srcAddress.toLowerCase());
-    const dtf = await context.DTF.get(id);
-    if (!dtf) return;
+    const dtf = await getOrCreateDTF(
+      context,
+      event.chainId,
+      event.srcAddress.toLowerCase(),
+      BigInt(event.block.number),
+      BigInt(event.block.timestamp),
+    );
     context.DTF.set({ ...dtf, auctionLength: event.params.newAuctionLength });
   },
 );
@@ -836,8 +871,13 @@ indexer.onEvent(
   { contract: "DTF", event: "MandateSet" },
   async ({ event, context }) => {
     const id = dtfId(event.chainId, event.srcAddress.toLowerCase());
-    const dtf = await context.DTF.get(id);
-    if (!dtf) return;
+    const dtf = await getOrCreateDTF(
+      context,
+      event.chainId,
+      event.srcAddress.toLowerCase(),
+      BigInt(event.block.number),
+      BigInt(event.block.timestamp),
+    );
     context.DTF.set({ ...dtf, mandate: event.params.newMandate });
   },
 );
@@ -849,8 +889,13 @@ indexer.onEvent(
   { contract: "DTF", event: "FeeRecipientsSet" },
   async ({ event, context }) => {
     const id = dtfId(event.chainId, event.srcAddress.toLowerCase());
-    const dtf = await context.DTF.get(id);
-    if (!dtf) return;
+    const dtf = await getOrCreateDTF(
+      context,
+      event.chainId,
+      event.srcAddress.toLowerCase(),
+      BigInt(event.block.number),
+      BigInt(event.block.timestamp),
+    );
     const encoded = event.params.recipients
       .map((r) => `${(r[0] as string).toLowerCase()}:${r[1].toString()}`)
       .join(",");

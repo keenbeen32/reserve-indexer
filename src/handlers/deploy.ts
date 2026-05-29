@@ -21,6 +21,7 @@ import {
 import {
   attachGovernanceToTimelock,
   createGovernanceTimelock,
+  getOrCreateDTF,
   getOrCreateGovernance,
   getOrCreateStakingToken,
   getOrCreateToken,
@@ -42,56 +43,25 @@ indexer.onEvent(
   async ({ event, context }) => {
     const chainId = event.chainId;
     const dtfAddress = event.params.folio.toLowerCase();
-    // TEMP DEBUG — see [ORDER-DEBUG] logs in dtf.ts. Remove once confirmed.
-    if (dtfAddress === "0x323c03c48660fe31186fa82c289b0766d331ce21") {
-      context.log.info(
-        `[ORDER-DEBUG] FolioDeployed block=${event.block.number} logIndex=${event.logIndex} CREATING DTF`,
-      );
-    }
     const proxyAdmin = event.params.folioAdmin.toLowerCase();
     const deployer = event.transaction.from
       ? (event.transaction.from as string).toLowerCase()
       : event.params.folioOwner.toLowerCase();
+    const blockNumber = BigInt(event.block.number);
+    const timestamp = BigInt(event.block.timestamp);
 
-    const token = await getOrCreateToken(context, chainId, dtfAddress, TokenType.DTF);
-    const dtf: Entity<"DTF"> = {
-      id: makeId(chainId, dtfAddress),
-      token_id: token.id,
-      totalRevenue: BIGINT_ZERO,
-      protocolRevenue: BIGINT_ZERO,
-      governanceRevenue: BIGINT_ZERO,
-      externalRevenue: BIGINT_ZERO,
+    // The DTF entity may already exist — Folio init events (MintFeeSet, etc.)
+    // fire earlier in this same block. Merge only the deploy-authoritative
+    // fields so config set by those handlers is preserved.
+    const dtf = await getOrCreateDTF(context, chainId, dtfAddress, blockNumber, timestamp);
+    context.DTF.set({
+      ...dtf,
       deployer,
       proxyAdmin,
-      mintingFee: BIGINT_ZERO,
-      tvlFee: BIGINT_ZERO,
-      auctionDelay: BIGINT_ZERO,
-      auctionLength: BIGINT_ZERO,
-      bidsEnabled: undefined,
-      trustedFillerRegistry: undefined,
-      trustedFillerEnabled: undefined,
-      mandate: "",
-      // Default to NATIVE DTF with PARTIAL price control; RebalanceControlSet
-      // event overrides if/when the DTF emits it.
-      weightControl: true,
-      priceControl: 1,
-      annualizedTvlFee: BIGINT_ZERO,
-      auctionApprovers: [],
-      legacyAuctionApprovers: [],
-      auctionLaunchers: [],
-      brandManagers: [],
-      admins: [],
-      legacyAdmins: [],
-      stToken_id: undefined,
-      stTokenAddress: undefined,
       ownerAddress: deployer,
-      ownerGovernance_id: undefined,
-      tradingGovernance_id: undefined,
-      blockNumber: BigInt(event.block.number),
-      timestamp: BigInt(event.block.timestamp),
-      feeRecipients: "",
-    };
-    context.DTF.set(dtf);
+      blockNumber,
+      timestamp,
+    });
   },
 );
 
@@ -119,8 +89,13 @@ indexer.onEvent(
     const dtfAddress = event.params.folio.toLowerCase();
     const dtfId = makeId(chainId, dtfAddress);
 
-    const dtf = await context.DTF.get(dtfId);
-    if (!dtf) return;
+    const dtf = await getOrCreateDTF(
+      context,
+      chainId,
+      dtfAddress,
+      BigInt(event.block.number),
+      BigInt(event.block.timestamp),
+    );
 
     const blockNumber = event.block.number;
     const stTokenAddress = event.params.stToken.toLowerCase();
