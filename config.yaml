@@ -248,4 +248,3 @@ chains:
       - name: UnstakingManager
       - name: Governance
       - name: Timelock
-
