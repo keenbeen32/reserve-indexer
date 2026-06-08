@@ -44,14 +44,14 @@ export async function getOrCreateToken(
 
   // The effect throws on RPC failure (so the failure is never cached). Fall
   // back to subgraph-equivalent dummy metadata here so the indexer keeps going.
-  let meta: { name: string; symbol: string; decimals: number; totalSupply: string };
+  let meta: { name: string; symbol: string; decimals: number };
   try {
     meta = await context.effect(getErc20Metadata, {
       chainId,
       address: tokenAddress,
     });
   } catch {
-    meta = { name: "unknown", symbol: "unknown", decimals: 18, totalSupply: "0" };
+    meta = { name: "unknown", symbol: "unknown", decimals: 18 };
   }
 
   const token: Entity<"Token"> = {

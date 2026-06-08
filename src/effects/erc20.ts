@@ -25,7 +25,6 @@ export const getErc20Metadata = createEffect(
       name: S.string,
       symbol: S.string,
       decimals: S.number,
-      totalSupply: S.string, // serialized bigint
     }),
     cache: true,
     rateLimit: false,
@@ -35,19 +34,20 @@ export const getErc20Metadata = createEffect(
     const args = { address: input.address as `0x${string}`, abi: ERC20_ABI } as const;
 
     // Any failed read throws the whole effect (all-or-nothing). The cache is
-    // only populated when every read succeeds.
-    const [name, symbol, decimals, totalSupply] = await Promise.all([
+    // only populated when every read succeeds. totalSupply is intentionally NOT
+    // read here — getOrCreateToken seeds Token.totalSupply to 0 and accumulates
+    // it from Transfer events; staking tokens use the separate
+    // getErc20TotalSupply effect. Reading it here was a wasted RPC round-trip.
+    const [name, symbol, decimals] = await Promise.all([
       client.readContract({ ...args, functionName: "name" }),
       client.readContract({ ...args, functionName: "symbol" }),
       client.readContract({ ...args, functionName: "decimals" }),
-      client.readContract({ ...args, functionName: "totalSupply" }),
     ]);
 
     return {
       name: String(name),
       symbol: String(symbol),
       decimals: Number(decimals),
-      totalSupply: (totalSupply as bigint).toString(),
     };
   },
 );

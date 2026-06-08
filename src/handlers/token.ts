@@ -95,10 +95,21 @@ export async function processTransfer(
   let nextToken: Entity<"Token"> = { ...token };
   const eventId = makeId(chainId, `${tokenAddress}-${txHash}-${logIndex}`);
 
+  // Accounts/balances loaded inside the branch below are captured here so the
+  // balance-update section at the end reuses them instead of re-loading the same
+  // (account, token) entities. Nothing mutates these between load and reuse, so
+  // the result is identical — this just removes duplicate gets on the hot path.
+  let sourceAccount: Entity<"Account"> | undefined;
+  let sourceBal: Entity<"AccountBalance"> | undefined;
+  let destAccount: Entity<"Account"> | undefined;
+  let destBal: Entity<"AccountBalance"> | undefined;
+
   if (isBurn) {
     const burnerAcc = await getOrCreateAccount(context, chainId, fromLower);
     const burnerBal = await getOrCreateAccountBalance(context, burnerAcc, token);
     const burnerBecomesNonHolder = burnerBal.amount === amount ? BIGINT_ONE : BIGINT_ZERO;
+    sourceAccount = burnerAcc;
+    sourceBal = burnerBal;
 
     nextToken = {
       ...nextToken,
@@ -162,13 +173,12 @@ export async function processTransfer(
       makeId(chainId, toLower),
       nextToken.id,
     );
-    const receiverBal = await getOrCreateAccountBalance(
-      context,
-      await getOrCreateAccount(context, chainId, toLower),
-      token,
-    );
+    const receiverAcc = await getOrCreateAccount(context, chainId, toLower);
+    const receiverBal = await getOrCreateAccountBalance(context, receiverAcc, token);
     const receiverBecomesHolder =
       receiverBal.amount === BIGINT_ZERO ? BIGINT_ONE : BIGINT_ZERO;
+    destAccount = receiverAcc;
+    destBal = receiverBal;
 
     nextToken = {
       ...nextToken,
@@ -208,11 +218,8 @@ export async function processTransfer(
     context.TransferEvent.set(ev);
   } else {
     // Plain transfer
-    const senderBal = await getOrCreateAccountBalance(
-      context,
-      await getOrCreateAccount(context, chainId, fromLower),
-      token,
-    );
+    const senderAcc = await getOrCreateAccount(context, chainId, fromLower);
+    const senderBal = await getOrCreateAccountBalance(context, senderAcc, token);
     const senderBecomesNonHolder = senderBal.amount === amount ? BIGINT_ONE : BIGINT_ZERO;
 
     const receiverIsFirstHold = await isNewTokenHolder(
@@ -220,14 +227,15 @@ export async function processTransfer(
       makeId(chainId, toLower),
       nextToken.id,
     );
-    const receiverBal = await getOrCreateAccountBalance(
-      context,
-      await getOrCreateAccount(context, chainId, toLower),
-      token,
-    );
+    const receiverAcc = await getOrCreateAccount(context, chainId, toLower);
+    const receiverBal = await getOrCreateAccountBalance(context, receiverAcc, token);
     const receiverBecomesHolder =
       receiverBal.amount === BIGINT_ZERO ? BIGINT_ONE : BIGINT_ZERO;
     const newHolderDelta = receiverIsFirstHold ? BIGINT_ONE : BIGINT_ZERO;
+    sourceAccount = senderAcc;
+    sourceBal = senderBal;
+    destAccount = receiverAcc;
+    destBal = receiverBal;
 
     nextToken = {
       ...nextToken,
@@ -266,17 +274,20 @@ export async function processTransfer(
 
   context.Token.set(nextToken);
 
-  // Update balances of source and destination
+  // Update balances of source and destination. The account + current balance
+  // were already loaded in the branch above (sourceAccount/sourceBal for
+  // burn+transfer, destAccount/destBal for mint+transfer); reuse them instead of
+  // re-loading. The `??` fallbacks are defensive and aren't hit in practice.
   if (isTransfer || isBurn) {
-    const sourceAccount = await getOrCreateAccount(context, chainId, fromLower);
-    let bal = await decreaseAccountBalance(context, sourceAccount, token, amount);
+    const acct = sourceAccount ?? (await getOrCreateAccount(context, chainId, fromLower));
+    let bal = await decreaseAccountBalance(context, acct, token, amount, sourceBal);
     bal = { ...bal, blockNumber, timestamp };
     context.AccountBalance.set(bal);
     updateAccountBalanceDailySnapshot(context, chainId, bal, blockNumber, timestamp);
   }
   if (isTransfer || isMint) {
-    const destAccount = await getOrCreateAccount(context, chainId, toLower);
-    let bal = await increaseAccountBalance(context, destAccount, token, amount, timestamp);
+    const acct = destAccount ?? (await getOrCreateAccount(context, chainId, toLower));
+    let bal = await increaseAccountBalance(context, acct, token, amount, timestamp, destBal);
     bal = { ...bal, blockNumber, timestamp };
     context.AccountBalance.set(bal);
     updateAccountBalanceDailySnapshot(context, chainId, bal, blockNumber, timestamp);

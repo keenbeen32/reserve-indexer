@@ -63,14 +63,19 @@ export async function getOrCreateAccountBalance(
 }
 
 // Increase + return new entity (caller persists via context.AccountBalance.set).
+// `prefetched` lets a caller pass a balance it already loaded this event, so the
+// shared transfer path doesn't re-issue getOrCreateAccountBalance for the same
+// (account, token). The entity isn't mutated between fetch and here, so the
+// result is identical either way.
 export async function increaseAccountBalance(
   context: Ctx,
   account: Entity<"Account">,
   token: Entity<"Token">,
   amount: bigint,
   timestamp: bigint,
+  prefetched?: Entity<"AccountBalance">,
 ): Promise<Entity<"AccountBalance">> {
-  const current = await getOrCreateAccountBalance(context, account, token);
+  const current = prefetched ?? (await getOrCreateAccountBalance(context, account, token));
   const previousAmount = current.amount;
   let next: Entity<"AccountBalance"> = {
     ...current,
@@ -91,8 +96,9 @@ export async function decreaseAccountBalance(
   account: Entity<"Account">,
   token: Entity<"Token">,
   amount: bigint,
+  prefetched?: Entity<"AccountBalance">,
 ): Promise<Entity<"AccountBalance">> {
-  const current = await getOrCreateAccountBalance(context, account, token);
+  const current = prefetched ?? (await getOrCreateAccountBalance(context, account, token));
   let newAmount = current.amount - amount;
   if (newAmount < BIGINT_ZERO) newAmount = BIGINT_ZERO;
   const next: Entity<"AccountBalance"> = {
